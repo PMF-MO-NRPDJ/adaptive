@@ -1,3 +1,3 @@
-set(modules "AdaptiveSolMacros.cmake")
+set(modules "AdaptiveMacros.cmake")
 
 install(FILES ${modules} DESTINATION ${DUNE_INSTALL_MODULEDIR})

@@ -3,7 +3,7 @@
 ################################
 
 #Name of the module
-Module: adaptive-sol
+Module: adaptive
 Version: 1.0
 Maintainer: jurak@math.hr
 #depending on

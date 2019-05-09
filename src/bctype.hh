@@ -21,9 +21,9 @@ public:
                    const Dune::FieldVector<typename I::ctype, I::coorddimension-1> & coord
                    ) const
   {
-//      auto x = intersection.geometry().global(coord);
-//      if(std::abs(x[1]) < 1E-8 and x[0] >= 0.0) // y=0, x>=0
-//          return false;
+      auto x = intersection.geometry().global(coord);
+      if(std::abs(x[1]) < 1E-8 and x[0] >= 0.0) // y=0, x>=0
+          return false;
       return true;
   }
 

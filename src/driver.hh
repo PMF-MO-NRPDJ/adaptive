@@ -77,7 +77,7 @@ void driver(Grid &grid, int subsampling,  int steps,
   Dune::PDELab::interpolate(bcext, gfs, z);
 
   // Petlja unutar koje adaptiramo mrežu
-  for (int i = 0; i < steps; ++i)
+  for(int i = 0; i < steps; ++i)
   {
     std::string iter = std::to_string(i);
 
@@ -107,7 +107,7 @@ void driver(Grid &grid, int subsampling,  int steps,
     auto eltype = Dune::GeometryType(Dune::GeometryTypes::simplex(dim));
     // Konstruktor za P0 elemente uzima tip elementa a ne gid view.
     P0FEM p0fem(eltype);
-    using  NCON = Dune::PDELab::NoConstraints;
+    using NCON = Dune::PDELab::NoConstraints;
     using P0GFS = Dune::PDELab::GridFunctionSpace<GV, P0FEM, NCON, VBE>;
     P0GFS p0gfs(gv, p0fem);
     using ESTLOP = Estimator<DirichletBdry, FEM>;
@@ -148,17 +148,18 @@ void driver(Grid &grid, int subsampling,  int steps,
 
     // Greška ne zadovoljava toleranciju. Označi elemente za profinjenje.
     //demangle(z0);
-    RF eta_refine, eta_coarsen;
-    Dune::PDELab::error_fraction(z0, alpha, 0.1, eta_refine, eta_coarsen, 1 /* verbose */);
+    RF eta_alpha, eta_beta;
+    RF beta = 0.1;
+    Dune::PDELab::error_fraction(z0, alpha, beta, eta_alpha, eta_beta, 1 /* verbose */);
     if (alpha >= 1.0)
-      eta_refine = 0.0;  // uniformno profinjenje
+      eta_alpha = 0.0;  // uniformno profinjenje
 
     // označi za profinjenje
-    eta_coarsen = 0; // ako ne želimo okrupnjavanje
-    int min_level =2;
+    //eta_beta = 0; // ako ne želimo okrupnjavanje
+    int min_level = 2;
     int max_level = 100;
     int verbosity = 1;
-    Dune::PDELab::mark_grid(grid, z0, eta_refine, eta_coarsen, min_level, max_level, verbosity);
+    Dune::PDELab::mark_grid(grid, z0, eta_alpha, eta_beta, min_level, max_level, verbosity);
     // profini mrežu i interpoliraj vektor rješenja
     Dune::PDELab::adapt_grid(grid, gfs, z, 2 * (degree + 1));
     // ponovo izračunaj Dirichletova ograničenja

@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <memory>
 
 #include <dune/common/parallel/mpihelper.hh>
 #include <dune/common/parametertreeparser.hh>
@@ -50,9 +51,12 @@ int main(int argc, char **argv) {
 
   // Primjer korištenja ALUGrid-a.
   using Grid = Dune::ALUGrid<dim, dim, Dune::simplex, Dune::conforming>;
-  std::unique_ptr<Grid> gridp = Dune::GmshReader<Grid>::read(filename);
+//  std::unique_ptr<Grid> gridp = Dune::GmshReader<Grid>::read(filename);
+  Grid * gridp = Dune::GmshReader<Grid>::read(filename);
 
   driver(*gridp, subsampling, steps, alpha, tol, output);
+
+  delete gridp;
 
   return 0;
 }
