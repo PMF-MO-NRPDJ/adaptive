@@ -1,0 +1,10 @@
+################################
+# Dune module information file #
+################################
+
+#Name of the module
+Module: adaptive-sol
+Version: 1.0
+Maintainer: jurak@math.hr
+#depending on
+Depends: dune-common dune-istl dune-geometry dune-uggrid dune-grid dune-localfunctions dune-typetree dune-pdelab dune-alugrid
