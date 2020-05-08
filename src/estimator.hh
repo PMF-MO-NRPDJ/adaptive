@@ -1,17 +1,19 @@
 #pragma once
-#include<vector>
+#include <vector>
 
-#include<dune/common/exceptions.hh>
-#include<dune/common/fvector.hh>
-#include<dune/geometry/type.hh>
+#include <dune/common/exceptions.hh>
+#include <dune/common/fvector.hh>
+#include <dune/geometry/type.hh>
+#include <dune/geometry/quadraturerules.hh>
+
 
 //#include<dune/pdelab/common/referenceelements.hh> 2.6.0
-#include<dune/geometry/referenceelements.hh>
-#include<dune/pdelab/common/quadraturerules.hh>
-#include<dune/pdelab/localoperator/pattern.hh>
-#include<dune/pdelab/localoperator/flags.hh>
-#include<dune/pdelab/localoperator/defaultimp.hh>
-#include<dune/pdelab/finiteelement/localbasiscache.hh>
+#include <dune/geometry/referenceelements.hh>
+//#include<dune/pdelab/common/quadraturerules.hh>
+#include <dune/pdelab/localoperator/pattern.hh>
+#include <dune/pdelab/localoperator/flags.hh>
+#include <dune/pdelab/localoperator/defaultimp.hh>
+#include <dune/pdelab/finiteelement/localbasiscache.hh>
 
 #include "coefficients.hh"
 
@@ -19,7 +21,7 @@
 /** Rezidualni procjenitelj za eliptičku zadaću:
  *
  * \f{align*}{
- *   -\Delta u(x) + eta u(x) &=& f(x) x\in\Omega,  \\
+ *   -\Delta u(x) + a u(x) &=& f(x) x\in\Omega,  \\
  *                     u(x) &=& g(x) x\in\partial\Omega_D \\
  *  -\nabla u(x) \cdot n(x) &=& j(x) x\in\partial\Omega_N \\
  * \f}
@@ -28,8 +30,8 @@
  * operatoru. Lokalno se računa \f$\eta_K^2\f$ na svakom elementu \f$K\f$.
  *
  * Pretpostavke i ograničenja:
- * - Uzima se da je  LFSU jednak \f$P_k\f$/\f$Q_k\f$ te da je
- *   LFSV jednak \f$P_0\f$.
+ * - Uzima se da je  LFSU jednak P_k/Q_k te da je
+ *   LFSV jednak P_0.
  * - Derivacije drugog reda se zanemaruju.
  *
  */
@@ -40,7 +42,7 @@ class Estimator : public Dune::PDELab::LocalOperatorDefaultFlags
   Dune::PDELab::LocalBasisCache<LocalBasis> cache;
   BCType& bctype; // parameter functions
 
-  // dijametar ćelije
+  // Metoda za računanje dijametra ćelije
   template<class GEO>
   double diameter (const GEO& geo) const
   {
@@ -72,17 +74,19 @@ public:
   {}
 
   // volumni dio indikatora
+  // h_K^2 int_K (f - au + \Delta u)^2 dx. Zanemarujemo druge derivacije pa računamo
+  // h_K^2 int_K (f - au)^2 dx .
   template<typename EG, typename LFSU, typename X, typename LFSV, typename R>
-  void alpha_volume (const EG& eg, const LFSU& lfsu, const X& x, const LFSV& lfsv, R& r) const
+  void alpha_volume(const EG& eg, const LFSU& lfsu, const X& x, const LFSV& lfsv, R& r) const
   {
-    auto geo = eg.geometry();
-    const int order = 2*lfsu.finiteElement().localBasis().order();
-    auto rule = Dune::PDELab::quadratureRule(geo,order);
+    const int dim  = EG::Geometry::mydimension;
+    const auto geo = eg.geometry();
+    const int order = 2*lfsu.finiteElement().localBasis().order();  // red integracije je 2k
+    const auto & rule = Dune::QuadratureRules<double,dim>::rule(geo.type(),order);
 
-    double sum(0.0);
+    double sum = 0.0;
     for (const auto& ip : rule)
       {
-        // evaluate basis functions
         auto& phihat = cache.evaluateFunction(ip.position(),lfsu.finiteElement().localBasis());
 
         // rješenje u
@@ -90,14 +94,14 @@ public:
         for (size_t i=0; i<lfsu.size(); i++) u += x(lfsu,i)*phihat[i];
 
         // slobodni član
-        auto q = reactCoeff();
+        auto a = reactCoeff();
 
         // desna strana
         auto f = RHS(eg.geometry().global(ip.position()));
 
         // Prostorni rezidual. Za P1 elemente laplas rješenja je jednak nuli.
         double factor =ip.weight() * geo.integrationElement(ip.position());
-        sum += (f-q*u)*(f-q*u)*factor;
+        sum += (f-a*u)*(f-a*u)*factor;
       }
 
     auto h_T = diameter(eg.geometry());
@@ -106,13 +110,14 @@ public:
 
   // Dio indikatora po unutarnjim stranicama elemenata.
   // Svaka se stranica obilazi samo jednom.
+  // Računamo (h/2) int_sigma [grad u . n]^2 ds
   template<typename IG, typename LFSU, typename X, typename LFSV, typename R>
-  void alpha_skeleton (const IG& ig,
-      const LFSU & lfsu_i, const X & x_i, const LFSV & lfsv_i,
-      const LFSU & lfsu_o, const X & x_o, const LFSV & lfsv_o,
+  void alpha_skeleton(const IG& ig,
+      const LFSU & lfsu_i, const X & x_i, const LFSV & lfsv_i,  // inside
+      const LFSU & lfsu_o, const X & x_o, const LFSV & lfsv_o,  // outside
       R& r_i, R& r_o) const
   {
-    // geometrije u lokalnim koordinatama elemenata
+    // geometrije stranice u lokalnim koordinatama elemenata
     auto insidegeo  = ig.geometryInInside();
     auto outsidegeo = ig.geometryInOutside();
 
@@ -124,33 +129,34 @@ public:
     auto geo_i = cell_inside.geometry();
     auto geo_o = cell_outside.geometry();
 
-    const int dim = IG::Entity::dimension;
+    const int dim = IG::Entity::dimension;  // dimenzija prostora
 
     auto globalgeo = ig.geometry();
     const int order = 2*lfsu_i.finiteElement().localBasis().order();
-    auto rule = Dune::PDELab::quadratureRule(globalgeo,order);
+    //auto rule = Dune::PDELab::quadratureRule(globalgeo,order); -- jednostavniji način
+    const auto & rule = Dune::QuadratureRules<double,dim-1>::rule(globalgeo.type(),order);
 
-    double sum(0.0);
-    for (const auto& ip : rule)
-      {
+    double sum = 0.0;
+    for (const auto& ip : rule){
         auto xi = ip.position();
-        // pozicija kvadraturne točke u lokalnim koordinatama elementa
+        // pozicija kvadraturne točke u lokalnim koordinatama elementa.
+        // Potrebna je za račun baznih funkcija.
         auto iplocal_i = insidegeo.global(xi);
         auto iplocal_o = outsidegeo.global(xi);
 
-        auto n_F = ig.unitOuterNormal(ip.position());
+        const auto n_F = ig.unitOuterNormal(xi);
 
         // grad u . n na inside elementu
         auto& gradphihat_i = cache.evaluateJacobian(
                                            iplocal_i, lfsu_i.finiteElement().localBasis()
                                                    );
         const auto S_i = geo_i.jacobianInverseTransposed(iplocal_i);
-        double gradun_i = 0.0;
-        for (size_t i=0; i<lfsu_i.size(); i++)
+        double gradun_i = 0.0; // gradu . n
+        for (size_t k=0; k<lfsu_i.size(); k++)
           {
             Dune::FieldVector<double,dim> v;
-            S_i.mv(gradphihat_i[i][0],v);
-            gradun_i += x_i(lfsu_i,i)*(v*n_F);
+            S_i.mv(gradphihat_i[k][0],v); // v = S_i*gradphihat_i[k][0] = gradphi_i[k]
+            gradun_i += x_i(lfsu_i,k)*(v*n_F);
           }
 
         // grad u . n na outside elementu
@@ -158,12 +164,12 @@ public:
                                             iplocal_o,lfsu_o.finiteElement().localBasis()
                                                    );
         const auto S_o = geo_o.jacobianInverseTransposed(iplocal_o);
-        double gradun_o = 0.0;
-        for (size_t i=0; i<lfsu_o.size(); i++)
+        double gradun_o = 0.0; // grad u . n
+        for (size_t k=0; k<lfsu_o.size(); k++)
           {
             Dune::FieldVector<double,dim> v;
-            S_o.mv(gradphihat_o[i][0],v);
-            gradun_o += x_o(lfsu_o,i)*(v*n_F);
+            S_o.mv(gradphihat_o[k][0],v); // v = S_o*gradphihat_i[k][0] = gradphi_o[k]
+            gradun_o += x_o(lfsu_o,k)*(v*n_F);
           }
 
         // integracija
@@ -172,37 +178,38 @@ public:
         sum += jump*jump*factor;
       }
 
-    // akumulacija indicatora
+    // akumulacija indikatora
     auto h_T = diameter(globalgeo);
     r_i.accumulate(lfsv_i, 0, 0.5*h_T * sum);
     r_o.accumulate(lfsv_o, 0, 0.5*h_T * sum);
   }
 
-  // boundary integral depending on test and ansatz functions
-  // We put the Dirchlet evaluation also in the alpha term to save some geometry evaluations
+  // Doprinos rezidualu od ruba domene. Dirichletovu granicu preskačemo.
+  // h_k int_sigma (j+ grad u . n)^2 ds
   template<typename IG, typename LFSU, typename X, typename LFSV, typename R>
-  void alpha_boundary (const IG& ig,
-                       const LFSU& lfsu_i, const X& x_i, const LFSV& lfsv_i,
+  void alpha_boundary(const IG& ig,
+                       const LFSU& lfsu_i, const X& x_i, const LFSV& lfsv_i, // postoji samo inside
                        R& r_i) const
   { 
-    // geometrija u lokalnim koordinatama elementa
+    // geometrija stranice u lokalnim koordinatama elementa
     auto insidegeo = ig.geometryInInside();
 
-    // element inside
+    // "inside" element (element koji sadrži stranicu)
     auto cell_inside = ig.inside();
 
-    //  geometrije elementa u globalnim koordinatama
+    //  geometrije elementa koji sadrži stranicu u globalnim koordinatama
     auto geo_i = cell_inside.geometry();
 
-    const int dim = IG::Entity::dimension;
+    const int dim = IG::Entity::dimension; // Prostorna dimenzija
 
+    // geometrija stranice u globalnim koordinatama
     auto globalgeo = ig.geometry();
+    // Kvadraturna formula -- jednostavniji način
     const int order = 2*lfsu_i.finiteElement().localBasis().order();
-    auto rule = Dune::PDELab::quadratureRule(globalgeo,order);
+    const auto & rule = Dune::PDELab::quadratureRule(globalgeo,order);
 
-    double sum(0.0);
-    for (const auto& ip : rule)
-      {
+    double sum = 0.0;
+    for(const auto& ip : rule){
         auto xi = ip.position();
         // preskoči Dirichletovu granicu
         if( bctype.isDirichlet(ig,xi) ) continue;
@@ -217,12 +224,12 @@ public:
                                     iplocal_i,lfsu_i.finiteElement().localBasis()
                                                    );
         const auto S_i = geo_i.jacobianInverseTransposed(iplocal_i);
-        double gradun_i = 0.0;
-        for (size_t i=0; i<lfsu_i.size(); i++)
+        double gradun_i = 0.0;  // grad u . n
+        for (size_t k=0; k<lfsu_i.size(); k++)
           {
             Dune::FieldVector<double,dim> v;
-            S_i.mv(gradphihat_i[i][0],v);
-            gradun_i += x_i(lfsu_i,i)*(v*n_F);
+            S_i.mv(gradphihat_i[k][0],v);  // v=S_i*gradphihat_i[k][0]
+            gradun_i += x_i(lfsu_i,k)*(v*n_F);
           }
 
         // Neumannov rubni uvjet
@@ -230,7 +237,7 @@ public:
 
         // integracija
         double factor = ip.weight() * globalgeo.integrationElement(xi);
-        double jump = gradun_i+j;
+        double jump = j + gradun_i;
         sum += jump*jump * factor;
       }
 

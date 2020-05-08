@@ -3,6 +3,7 @@ add_executable(adaptive adaptive.cc driver.hh
                operator.hh
                bctype.hh
                coefficients.hh
+               norm.hh
                adaptive.ini)
 
 

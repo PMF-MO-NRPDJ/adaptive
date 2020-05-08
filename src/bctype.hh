@@ -21,9 +21,9 @@ public:
                    const Dune::FieldVector<typename I::ctype, I::coorddimension-1> & coord
                    ) const
   {
-      auto x = intersection.geometry().global(coord);
-      if(std::abs(x[1]) < 1E-8 and x[0] >= 0.0) // y=0, x>=0
-          return false;
+//      auto x = intersection.geometry().global(coord);
+//      if(std::abs(x[1]) < 1E-8 and x[0] >= 0.0) // y=0, x>=0
+//          return false;
       return true;
   }
 
@@ -70,6 +70,24 @@ public:
   inline const GV& getGridView () {return gv;}
 };
 
+// Pomoćna kratica.
+template <typename GV>
+using ATraits = Dune::PDELab::AnalyticGridFunctionTraits<GV,double,1>;// 1 = skalarna funkcija
+
+
+template <typename GV>
+class ExactGF : public Dune::PDELab::AnalyticGridFunctionBase<ATraits<GV>, ExactGF<GV>>
+{
+public:
+   typedef Dune::PDELab::AnalyticGridFunctionBase<ATraits<GV>, ExactGF<GV> > BaseT;
+
+   ExactGF(GV const & gv) : BaseT(gv) {}
+
+   void evaluateGlobal(typename ATraits<GV>::DomainType const & x, typename ATraits<GV>::RangeType & y) const
+   {
+       y = exact(x);
+   }
+};
 
 
 
